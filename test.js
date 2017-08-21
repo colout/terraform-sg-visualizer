@@ -8,40 +8,42 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
 
   // json object for security group
   var jsonGoJSSecurityGroups = [];
-  var jsonGoJSSecurityGroupRules = [];
+  var jsonGoJSFromRules = [];
+  var jsonGoJSToRules = [];
+  var jsonGoJSCompositeRules = [];
 
-
-  // Generate names
+  // Generate securitygroup json
   for(var name in jsonTerraformSecurityGroups) {
     if(jsonTerraformSecurityGroups.hasOwnProperty(name)) {
         var jsonObj = jsonTerraformSecurityGroups[name]
 
-        var sg = {};
-        sg.items = [] 
+        var s = {};
+        s.items = [] 
 
-        sg.name = name; 
-        sg.items.push( { "name": "name", "value": name } )
+        s.title = name; 
+        s.id = name; 
+        s.isShadowed = true;
+        s.icon = "sg.ico"
+        //s.items.push( { "name": "name", "value": name } )
 
-        //var fieldList = ['vpcid']
+        var fieldList = ['']
         for (var i in fieldList) {
-          sg.items.push( { "name": fieldList[i], "value": jsonObj[fieldList[i]] } )
+          s.items.push( { "name": fieldList[i], "value": jsonObj[fieldList[i]] } )
         }
-        //sg.tags = jsonObj.tags
 
-        jsonGoJSSecurityGroups.push(sg);
+        jsonGoJSSecurityGroups.push(s);
     }
   } 
 
-  // Generate names
+  // Generate composite rules json 
   for(var name in jsonTerraformSecurityGroupRules) {
     if(jsonTerraformSecurityGroupRules.hasOwnProperty(name)) {
         var jsonObj = jsonTerraformSecurityGroupRules[name]
 
-        var sg = {};
+        var s = {};
+        s.meta = [] 
 
-        sg.name = name; 
-        sg.items = [] 
-
+        // Generate the title of the 
       	var title = jsonObj['protocol']
       	if (jsonObj['to_port'] == jsonObj['from_port']) {
       		title = title + "/" + jsonObj['to_port']
@@ -49,34 +51,82 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
       	else {
       		title = title + "/" + jsonObj['to_port'] + "-" + jsonObj['from_port']
       	}
-        sg.items.push( { "name": "name", "value": title } )        
-        
-        // Set all the other fields
-        //var fieldList = ['type','from_port','to_port','protocol','security_group_id','source_security_group_id']
-        var fieldList = ['from_port','to_port','protocol']
-        for (var i in fieldList) {
 
-          sg.items.push( { "name": fieldList[i], "value": jsonObj[fieldList[i]] } )
-        }
+        s.title = title;
+        s.icon = "sg_rule.ico"
 
- 				var myRegexp = /^\$\{aws_security_group.(.*).id\}$/g;
-				var match = myRegexp.exec(jsonObj['source_security_group_id']);
-				sg.from = match[1];
-
-        // Set From Port
  				var myRegexp = /^\$\{aws_security_group.(.*).id\}$/g;
 				var match = myRegexp.exec(jsonObj['security_group_id']);
-				sg.to = match[1];
 
+        s.id = title + " to " + match[1]; 
+        s.isShadowed = false;
 
-        jsonGoJSSecurityGroupRules.push(sg);
+        var fieldList = ['protocol','from_port','to_port',"security_group_id"]
+        for (var i in fieldList) {
+          s.meta.push( { "name": fieldList[i], "value": jsonObj[fieldList[i]] } )
+        }
+
+        var already_exists = false;
+      	for (var i in jsonGoJSCompositeRules) {
+      		if (JSON.stringify(s) == JSON.stringify(jsonGoJSCompositeRules[i])) {
+      			already_exists = true;
+      		}
+      	}
+        if (!already_exists) {
+        	jsonGoJSCompositeRules.push(s);
+
+	 				var myRegexp = /^\$\{aws_security_group.(.*).id\}$/g;
+					var match = myRegexp.exec(jsonObj['security_group_id']);
+        	jsonGoJSToRules.push({"from": s.id, "to": match[1]});
+        }
     }
-  }
+  } 
+        	console.log(jsonGoJSCompositeRules)
+
+  // Generate from rules 
+  for(var name in jsonTerraformSecurityGroupRules) {
+    if(jsonTerraformSecurityGroupRules.hasOwnProperty(name)) {
+        var jsonObj = jsonTerraformSecurityGroupRules[name]
+
+        var s = {};
+        s.meta = [] 
+
+        // Generate the title of the 
+      	var title = jsonObj['protocol']
+      	if (jsonObj['to_port'] == jsonObj['from_port']) {
+      		title = title + "/" + jsonObj['to_port']
+      	}
+      	else {
+      		title = title + "/" + jsonObj['to_port'] + "-" + jsonObj['from_port']
+      	}
+
+      	// Set Metadata
+        var fieldList = ['protocol','from_port','to_port',"security_group_id"]
+        for (var i in fieldList) {
+          s.meta.push( { "name": fieldList[i], "value": jsonObj[fieldList[i]] } )
+        }
+
+      	// Set From
+ 				var myRegexp = /^\$\{aws_security_group.(.*).id\}$/g;
+				var match = myRegexp.exec(jsonObj['source_security_group_id']);
+				s.from = match[1];
+
+        // Set To
+        jQuery.each(jsonGoJSCompositeRules, function(i,js){
+
+		    if(JSON.stringify(js.meta) == JSON.stringify(s.meta))
+          s.to = js.id;
+				});
+
+        jsonGoJSFromRules.push(s);
+    }
+  } 
 
   var jsonGoJS = {nodeDataArray: []}
-  jsonGoJS.nodeDataArray = jsonGoJSSecurityGroups.concat(jsonGoJSSecurityGroupRules)
-  //jsonGoJS = jQuery.extend(jsonGoJS,{"nodeKeyProperty": "name"})
-  console.log(JSON.stringify(jsonGoJS, null, 2))
+  jsonGoJS.nodeDataArray = jsonGoJSSecurityGroups.concat(jsonGoJSCompositeRules)
+  jsonGoJS.linkDataArray = jsonGoJSFromRules.concat(jsonGoJSToRules)
+  jsonGoJS = jQuery.extend(jsonGoJS,{"nodeKeyProperty": "id"})
+  //console.log(JSON.stringify(jsonGoJS, null, 2))
 
 
   // Graph settings
@@ -93,9 +143,9 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
           layout: $(go.LayeredDigraphLayout, { 
           	layerSpacing: 100, 
           	columnSpacing: 10,
-          	direction: 0,
-          	setsPortSpots: true,
-          	layeringOption: go.LayeredDigraphLayout.LayerLongestPathSink 
+          	aggressiveOption: go.LayeredDigraphLayout.AggressiveMore,
+          	setsPortSpots: false,
+          	layeringOption: go.LayeredDigraphLayout.LayerLongestPathSource   
           }),
           "undoManager.isEnabled": true
         });
@@ -104,10 +154,10 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
   var templSecurityGroup =
     $(go.Panel, "Horizontal",
       $(go.TextBlock,
-	      { stroke: "black", font: "bold 14px sans-serif" },
+	      { stroke: "black", font: "16px Consolas" },
         new go.Binding("text", "name")),
       $(go.TextBlock,
-        { margin: 5, editable: true },
+        { margin: 5, editable: true,font: "bold 16px Consolas" },
         new go.Binding("text", "value"))
     );
 
@@ -115,22 +165,27 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
 	myDiagram.nodeTemplate =
 	  $(go.Node, "Vertical",
       {        
-        isShadowed: true,
-        background: "#f2f2f2" },
-	    
+				fromSpot: go.Spot.RightSide,  
+        toSpot: go.Spot.LeftSide,
+        isShadowed: false,
+        background: "#f2f2f2" 
+      },
+	    new go.Binding("isShadowed", "isShadowed"),
+
 	    // Icon
 	    $(go.Picture,
-	      { margin: 10, width: 50, height: 50, background: "orange" }),
-	    
+	      { margin: 10, width: 50, height: 50, source: "sg_rule.ico" },
+	      new go.Binding("source", "icon")),
+
 	    // Title
 	    $(go.TextBlock,
-	      { margin: 3, stroke: "black", font: "bold 16px sans-serif", alignment: go.Spot.TopLeft },
-	      new go.Binding("text", "name")),
+	      { margin: 3, stroke: "black", font: "bold 16px sans-serif", alignment: go.Spot.Center },
+	      new go.Binding("text", "title")),
 
 	    // The data
       $(go.Panel, "Table",
         {
-          maxSize: new go.Size(200, 999),
+          maxSize: new go.Size(100, 999),
           margin: 5,
           defaultAlignment: go.Spot.Left
         },
@@ -154,43 +209,11 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
 
 
     myDiagram.linkTemplate =
-      $(go.Link, go.Link.AvoidsNodes,
-        { isShadowed: true, corner: 5, relinkableFrom: true, relinkableTo: true },
+      $(go.Link,
+        { routing: go.Link.AvoidsNodes, curve: go.Link.Bezier, isShadowed: true, corner: 10, relinkableFrom: true, relinkableTo: true },
         $(go.Shape, { strokeWidth: 4, stroke: "Black" }),  // the link shape
         $(go.Shape,  // the arrowhead
-          { scale: 2, toArrow: "standard", stroke: "Black", fill: "Orange" }),
-        $(go.Panel,	"Vertical",    // Icon
-
-          { 
-            background: "#f2f2f2",  
-            margin: 5,
-            defaultAlignment: go.Spot.Left
-	        },
-
-		    // The data
-	      $(go.Panel, "Table",
-	        {
-	          maxSize: new go.Size(200, 999),
-	          margin: new go.Margin(6, 10, 0, 3),
-	          defaultAlignment: go.Spot.Left
-	        },
-	        $(go.RowColumnDefinition, { column: 2, width: 4 }),
-	        
-	        // Generate the table
-	          $(go.Panel, "Vertical",
-	            {
-	              name: "LIST",
-	              row: 1,
-	              padding: 3,
-	              alignment: go.Spot.TopLeft,
-	              defaultAlignment: go.Spot.Left,
-	              stretch: go.GraphObject.Horizontal,
-	              itemTemplate: templSecurityGroup
-	            },
-	            new go.Binding("itemArray", "items").makeTwoWay()),
-	          )
-
-        )
+          { scale: 2, toArrow: "Standard", stroke: "Black", fill: "Orange" }),
       );
 
   // Draw it
