@@ -122,8 +122,15 @@
         "protocol": "tcp",
         "source_security_group_id": "${aws_security_group.ci_node.id}",
         "security_group_id" : "${aws_security_group.webapp_node.id}"
+      },
+        "from_webapp_to_sql_node_tcp_3306": {
+        "type": "ingress",
+        "from_port": 3306,
+        "to_port": 3306,
+        "protocol": "tcp",
+        "source_security_group_id": "${aws_security_group.webapp_node.id}",
+        "security_group_id" : "${aws_security_group.sql_node.id}"
       }
-
     }
   }
 }

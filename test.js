@@ -141,11 +141,12 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
           //layout: $(go.ForceDirectedLayout),
 
           layout: $(go.LayeredDigraphLayout, { 
-          	layerSpacing: 100, 
+          	layerSpacing: 200, 
           	columnSpacing: 10,
           	aggressiveOption: go.LayeredDigraphLayout.AggressiveMore,
           	setsPortSpots: false,
-          	layeringOption: go.LayeredDigraphLayout.LayerLongestPathSource   
+          	packOption: go.LayeredDigraphLayout.PackStraighten,
+          	layeringOption: go.LayeredDigraphLayout.LayerOptimalLinkLength  
           }),
           "undoManager.isEnabled": true
         });
@@ -210,7 +211,7 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
 
     myDiagram.linkTemplate =
       $(go.Link,
-        { routing: go.Link.AvoidsNodes, curve: go.Link.Bezier, isShadowed: true, corner: 10, relinkableFrom: true, relinkableTo: true },
+        { routing: go.Link.Orthogonal, curve: go.Link.JumpOver, isShadowed: true, relinkableFrom: true, relinkableTo: true },
         $(go.Shape, { strokeWidth: 4, stroke: "Black" }),  // the link shape
         $(go.Shape,  // the arrowhead
           { scale: 2, toArrow: "Standard", stroke: "Black", fill: "Orange" }),
