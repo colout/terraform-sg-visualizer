@@ -1,0 +1,44 @@
+{
+  "resource": {
+    "aws_security_group": {
+      "basenode": {
+        "name": "${var.network_namespace}-basenode",
+        "vpcid": "${var.vpcid}",
+
+        "tags": {
+          "name": "${var.network_namespace}-basenode",
+          "network_namespace": "${var.network_namespace}",
+          "purpose": "basenode"
+        }
+      },
+      "saltmaster": {
+        "name": "${var.network_namespace}-saltmaster",
+        "vpcid": "${var.vpcid}",
+
+        "tags": {
+          "name": "${var.network_namespace}-saltmaster",
+          "network_namespace": "${var.network_namespace}",
+          "purpose": "saltmaster"
+        }
+      }
+    },
+    "aws_security_group_rule": {
+      "from_basenode_to_saltmaster_tcp_4505-4506": {
+        "type": "ingress",
+        "from_port": 4505,
+        "to_port": 4506,
+        "protocol": "tcp",
+        "source_security_group_id": "${aws_security_group.basenode.id}",
+        "security_group_id" : "${aws_security_group.saltmaster.id}"
+      },
+      "from_saltmaster_to_basenode_tcp_22": {
+        "type": "ingress",
+        "from_port": 22,
+        "to_port": 22,
+        "protocol": "tcp",
+        "source_security_group_id": "${aws_security_group.saltmaster.id}",
+        "security_group_id" : "${aws_security_group.basenode.id}"
+      }
+    }
+  }
+}
