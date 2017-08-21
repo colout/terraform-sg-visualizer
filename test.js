@@ -2,14 +2,13 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
   
   var jsonTerraformSecurityGroups = myjson.responseJSON.resource.aws_security_group;
   var jsonTerraformSecurityGroupRules = myjson.responseJSON.resource.aws_security_group_rule;
-  console.log (jsonTerraformSecurityGroups);
   
   // Generate gojs-friendly json
   //////////////////////////////
 
   // json object for security group
-  var jsonGoJSSecurityGroups = {nodeDataArray: []};
-  var jsonGoJSSecurityGroupRules = {linkDataArray: []};
+  var jsonGoJSSecurityGroups = [];
+  var jsonGoJSSecurityGroupRules = [];
 
 
   // Generate names
@@ -23,13 +22,13 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
         sg.name = name; 
         sg.items.push( { "name": "name", "value": name } )
 
-        var fieldList = ['vpcid']
+        //var fieldList = ['vpcid']
         for (var i in fieldList) {
           sg.items.push( { "name": fieldList[i], "value": jsonObj[fieldList[i]] } )
         }
         //sg.tags = jsonObj.tags
 
-        jsonGoJSSecurityGroups.nodeDataArray.push(sg);
+        jsonGoJSSecurityGroups.push(sg);
     }
   } 
 
@@ -43,12 +42,20 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
         sg.name = name; 
         sg.items = [] 
 
-        // Name is for debug only
-        //sg.items.push( { "name": "name", "value": name } )        
+      	var title = jsonObj['protocol']
+      	if (jsonObj['to_port'] == jsonObj['from_port']) {
+      		title = title + "/" + jsonObj['to_port']
+      	}
+      	else {
+      		title = title + "/" + jsonObj['to_port'] + "-" + jsonObj['from_port']
+      	}
+        sg.items.push( { "name": "name", "value": title } )        
         
         // Set all the other fields
-        var fieldList = ['type','from_port','to_port','protocol','security_group_id','source_security_group_id']
+        //var fieldList = ['type','from_port','to_port','protocol','security_group_id','source_security_group_id']
+        var fieldList = ['from_port','to_port','protocol']
         for (var i in fieldList) {
+
           sg.items.push( { "name": fieldList[i], "value": jsonObj[fieldList[i]] } )
         }
 
@@ -62,13 +69,14 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
 				sg.to = match[1];
 
 
-        jsonGoJSSecurityGroupRules.linkDataArray.push(sg);
+        jsonGoJSSecurityGroupRules.push(sg);
     }
   }
-  console.log(JSON.stringify(jsonGoJSSecurityGroupRules))
 
-  jsonGoJS = jQuery.extend(jsonGoJSSecurityGroupRules,jsonGoJSSecurityGroups)
-  jsonGoJS = jQuery.extend(jsonGoJS,{"nodeKeyProperty": "name"})
+  var jsonGoJS = {nodeDataArray: []}
+  jsonGoJS.nodeDataArray = jsonGoJSSecurityGroups.concat(jsonGoJSSecurityGroupRules)
+  //jsonGoJS = jQuery.extend(jsonGoJS,{"nodeKeyProperty": "name"})
+  console.log(JSON.stringify(jsonGoJS, null, 2))
 
 
   // Graph settings
@@ -76,14 +84,15 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
     myDiagram =
       $(go.Diagram, "myDiagramDiv",  // must name or refer to the DIV HTML element
         {
+        	"toolManager.mouseWheelBehavior": go.ToolManager.WheelZoom,
           initialContentAlignment: go.Spot.Center,
           allowDelete: false,
           allowCopy: false,
           //layout: $(go.ForceDirectedLayout),
 
           layout: $(go.LayeredDigraphLayout, { 
-          	layerSpacing: 250, 
-          	columnSpacing: 100,
+          	layerSpacing: 100, 
+          	columnSpacing: 10,
           	direction: 0,
           	setsPortSpots: true,
           	layeringOption: go.LayeredDigraphLayout.LayerLongestPathSink 
