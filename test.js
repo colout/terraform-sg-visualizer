@@ -1,5 +1,22 @@
 var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
   
+  // Color pallett and a function to pop then cycle
+  //   Using a fixed pallet increases contrast
+  var colorPallet = {
+    'pallet': [
+      "#ee4035",
+      '#f37736',
+      '#fdf498',
+      '#7bc043',
+      '#0392cf'],
+    'index': -1,
+    'get': function() {
+      this.index++;
+      if (this.index >= this.pallet.length) this.index=0
+      return (this.pallet[this.index]);
+    }
+  };
+
   var jsonTerraformSecurityGroups = myjson.responseJSON.resource.aws_security_group;
   var jsonTerraformSecurityGroupRules = myjson.responseJSON.resource.aws_security_group_rule;
   
@@ -38,8 +55,8 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
   // Generate composite rules json 
   for(var name in jsonTerraformSecurityGroupRules) {
     if(jsonTerraformSecurityGroupRules.hasOwnProperty(name)) {
-        var jsonObj = jsonTerraformSecurityGroupRules[name]
-
+      var jsonObj = jsonTerraformSecurityGroupRules[name]
+      if (jsonObj['type'] == 'ingress') {
         var s = {};
         s.meta = [] 
 
@@ -55,10 +72,7 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
         s.title = title;
         s.icon = "sg_rule.ico"
 
- 				var myRegexp = /^\$\{aws_security_group.(.*).id\}$/g;
-				var match = myRegexp.exec(jsonObj['security_group_id']);
-
-        s.id = title + " to " + match[1]; 
+        s.id = title + " to " + removeSgInterpolation(jsonObj['security_group_id']); 
         s.isShadowed = false;
 
         var fieldList = ['protocol','from_port','to_port',"security_group_id"]
@@ -74,11 +88,10 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
       	}
         if (!already_exists) {
         	jsonGoJSCompositeRules.push(s);
-
-	 				var myRegexp = /^\$\{aws_security_group.(.*).id\}$/g;
-					var match = myRegexp.exec(jsonObj['security_group_id']);
-        	jsonGoJSToRules.push({"from": s.id, "to": match[1]});
+          
+        	jsonGoJSToRules.push({"from": s.id, "to": removeSgInterpolation(jsonObj['security_group_id']), "lineColor": colorPallet.get()});
         }
+      }
     }
   } 
         	console.log(jsonGoJSCompositeRules)
@@ -86,10 +99,11 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
   // Generate from rules 
   for(var name in jsonTerraformSecurityGroupRules) {
     if(jsonTerraformSecurityGroupRules.hasOwnProperty(name)) {
-        var jsonObj = jsonTerraformSecurityGroupRules[name]
-
+      var jsonObj = jsonTerraformSecurityGroupRules[name]
+      if (jsonObj['type'] == 'ingress') {
         var s = {};
         s.meta = [] 
+        s.lineColor = colorPallet.get();
 
         // Generate the title of the 
       	var title = jsonObj['protocol']
@@ -106,19 +120,23 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
           s.meta.push( { "name": fieldList[i], "value": jsonObj[fieldList[i]] } )
         }
 
-      	// Set From
- 				var myRegexp = /^\$\{aws_security_group.(.*).id\}$/g;
-				var match = myRegexp.exec(jsonObj['source_security_group_id']);
-				s.from = match[1];
-
         // Set To
         jQuery.each(jsonGoJSCompositeRules, function(i,js){
 
-		    if(JSON.stringify(js.meta) == JSON.stringify(s.meta))
+        if(JSON.stringify(js.meta) == JSON.stringify(s.meta))
           s.to = js.id;
-				});
+        });
+
+      	// Set From
+        if (jsonObj.self) {
+          s.from = removeSgInterpolation(jsonObj['security_group_id']);
+        }
+        else {
+          s.from = removeSgInterpolation(jsonObj['source_security_group_id']);
+        }
 
         jsonGoJSFromRules.push(s);
+      }
     }
   } 
 
@@ -126,7 +144,7 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
   jsonGoJS.nodeDataArray = jsonGoJSSecurityGroups.concat(jsonGoJSCompositeRules)
   jsonGoJS.linkDataArray = jsonGoJSFromRules.concat(jsonGoJSToRules)
   jsonGoJS = jQuery.extend(jsonGoJS,{"nodeKeyProperty": "id"})
-  //console.log(JSON.stringify(jsonGoJS, null, 2))
+  console.log(jsonGoJS)
 
 
   // Graph settings
@@ -144,9 +162,12 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
           	layerSpacing: 200, 
           	columnSpacing: 10,
           	aggressiveOption: go.LayeredDigraphLayout.AggressiveMore,
-          	setsPortSpots: false,
+          	//setsPortSpots: false,
+            iterations: 10,
           	packOption: go.LayeredDigraphLayout.PackStraighten,
-          	layeringOption: go.LayeredDigraphLayout.LayerOptimalLinkLength  
+          	layeringOption: go.LayeredDigraphLayout.LayerLongestPathSource,
+            cycleRemoveOption: go.LayeredDigraphLayout.CycleDepthFirst,
+            initializeOption: go.LayeredDigraphLayout.InitDepthFirstIn,
           }),
           "undoManager.isEnabled": true
         });
@@ -211,13 +232,26 @@ var myjson = jQuery.getJSON("http://localhost:8000/data.json", function(json){
 
     myDiagram.linkTemplate =
       $(go.Link,
-        { routing: go.Link.Orthogonal, curve: go.Link.JumpOver, isShadowed: true, relinkableFrom: true, relinkableTo: true },
-        $(go.Shape, { strokeWidth: 4, stroke: "Black" }),  // the link shape
-        $(go.Shape,  // the arrowhead
-          { scale: 2, toArrow: "Standard", stroke: "Black", fill: "Orange" }),
+        { routing: go.Link.Orthogonal, curve: go.Link.JumpGap },
+        $(go.Shape, { isPanelMain: true, stroke: "White", strokeWidth: 8 }),
+        $(go.Shape, { isPanelMain: true, stroke: "Black", strokeWidth: 5 }),
+        $(go.Shape, { isPanelMain: true, stroke: "Orange", strokeWidth: 3 }, new go.Binding("stroke", "lineColor")),
+        $(go.Shape, 
+          { toArrow: "Standard", scale: 2,  stroke: "Black", fill: "Orange" }, new go.Binding("fill", "lineColor")),
       );
 
   // Draw it
 	myDiagram.model =  go.Model.fromJson(JSON.stringify(jsonGoJS));
 	//myDiagram.model = new go.GraphLinksModel(nodeDataArray, linkDataArray);
+
+  console.log(colorPallet.get())
+  console.log(colorPallet.get())
+  console.log(colorPallet.get())
+
 });
+
+function removeSgInterpolation (s) {
+  var myRegexp = /^\$\{aws_security_group.(.*).id\}$/g;
+  var match = myRegexp.exec(s);
+  return match[1];
+}
